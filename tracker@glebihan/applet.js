@@ -328,10 +328,8 @@ MyApplet.prototype =
             final_results[result_type] = new Array();
             if (results[result_type].length > 0)
             {
-                global.log(result_type + ":" + results[result_type].length);
                 for (var i in results[result_type])
                 {
-                    global.log("\t" + results[result_type][i]);
                     switch (result_type)
                     {
                         case "software":
@@ -382,7 +380,6 @@ MyApplet.prototype =
                 }
             }
         }
-        global.log(final_results);
     }
 }
 
