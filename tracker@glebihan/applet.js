@@ -9,6 +9,8 @@ const PopupMenu = imports.ui.popupMenu;
 const St = imports.gi.St;
 const Mainloop = imports.mainloop;
 const Cinnamon = imports.gi.Cinnamon;
+const Main = imports.ui.main;
+const Settings = imports.ui.settings;
 const _ = Gettext.gettext;
 
 const RESULT_TYPES_LABELS = 
@@ -229,21 +231,34 @@ FileResult.prototype =
     }
 }
 
-function MyApplet(orientation)
+function MyApplet(orientation, panel_height, instanceId)
 {
-    this._init(orientation);
+    this._init(orientation, panel_height, instanceId);
 }
 
 MyApplet.prototype =
 {
     __proto__: Applet.IconApplet.prototype,
 
-    _init: function(orientation)
+    _init: function(orientation, panel_height, instanceId)
     {
-        Applet.IconApplet.prototype._init.call(this, orientation);
-
         try
         {
+            Applet.IconApplet.prototype._init.call(this, orientation, panel_height, instanceId);
+        
+            menuItem = new Applet.MenuItem(_("Indexing Preferences"), null, Lang.bind(this, function(actor, event)
+            {
+                Util.spawnCommandLine('tracker-preferences');
+            }));
+            this._applet_context_menu.addMenuItem(menuItem);
+            
+            this.settings = new Settings.AppletSettings(this, "tracker@glebihan", instanceId);
+            this.settings.bindProperty(Settings.BindingDirection.IN,
+                                     "launch_shortcut",
+                                     "launch_shortcut",
+                                     this.on_launch_shortcut_changed,
+                                     null);
+                                     
             this.set_applet_icon_name("find");
             this.set_applet_tooltip(_("Search files using Tracker"));
 
@@ -281,11 +296,18 @@ MyApplet.prototype =
             this._search_process = null;
             
             this._appSys = Cinnamon.AppSystem.get_default();
+            
+            this.on_launch_shortcut_changed();
         }
         catch(e)
         {
             global.logError(e);
         }
+    },
+    
+    on_launch_shortcut_changed: function()
+    {
+        Main.keybindingManager.addHotKey("tracker_glebihan_launch", this.launch_shortcut, Lang.bind(this, this.launch));
     },
 
     _onSearchTextChanged: function(se, prop)
@@ -308,10 +330,15 @@ MyApplet.prototype =
     {
         if (event.get_button() == 1)
         {
-            this._search_menu.toggle();
-            global.stage.set_key_focus(this.searchEntry);
-            this.searchEntryText.set_selection(0, this.searchEntry.get_text().length);
+            this.launch();
         }
+    },
+    
+    launch: function()
+    {
+        this._search_menu.toggle();
+        global.stage.set_key_focus(this.searchEntry);
+        this.searchEntryText.set_selection(0, this.searchEntry.get_text().length);
     },
 
     push_results: function(results)
@@ -383,8 +410,8 @@ MyApplet.prototype =
     }
 }
 
-function main(metadata, orientation)
+function main(metadata, orientation, panel_height, instanceId)
 {
-    let myApplet = new MyApplet(orientation);
+    let myApplet = new MyApplet(orientation, panel_height, instanceId);
     return myApplet;
 }
