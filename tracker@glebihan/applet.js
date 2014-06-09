@@ -283,7 +283,7 @@ MyApplet.prototype =
                                      this.on_launch_shortcut_changed,
                                      null);
                                      
-            this.set_applet_icon_name("find");
+            this.set_applet_icon_name("edit-find-symbolic");
             this.set_applet_tooltip(_("Search files using Tracker"));
 
             let menuManager = new PopupMenu.PopupMenuManager(this);
