@@ -9,6 +9,7 @@ const PopupMenu = imports.ui.popupMenu;
 const St = imports.gi.St;
 const Mainloop = imports.mainloop;
 const Cinnamon = imports.gi.Cinnamon;
+const Tracker = imports.gi.Tracker;
 const Main = imports.ui.main;
 const Settings = imports.ui.settings;
 const _ = Gettext.gettext;
@@ -21,6 +22,16 @@ const RESULT_TYPES_LABELS =
     music: _("Music"),
     folders: _("Folders"),
     files: _("Other Files")
+}
+
+const CONVERT_TYPES = 
+{
+    "http://www.tracker-project.org/temp/nmm#MusicPiece": "music",
+    "http://www.tracker-project.org/temp/nmm#Video": "videos",
+    "http://www.semanticdesktop.org/ontologies/2007/03/22/nfo#SoftwareApplication": "software",
+    "http://www.tracker-project.org/temp/nmm#Photo": "pictures",
+    "http://www.semanticdesktop.org/ontologies/2007/03/22/nfo#Folder": "folders",
+    "http://www.semanticdesktop.org/ontologies/2007/03/22/nfo#FileDataObject": "files"
 }
 
 function SearchProcess(applet, searchString)
@@ -44,6 +55,7 @@ SearchProcess.prototype =
     {
         try
         {
+            var conn = Tracker.SparqlConnection.get(null);
             var argv = ["tracker-search", "--disable-snippets", "-l", (step == "folders" ? "5" : "10"), "--disable-color"];
             switch (step)
             {
@@ -55,6 +67,7 @@ SearchProcess.prototype =
                 case "music": argv.push("-m"); break;
             }
             var words = this._searchString.split(" ");
+            var query_params = new Array();
             for (var i in words)
             {
                 if (words[i])
@@ -62,74 +75,74 @@ SearchProcess.prototype =
                     if (words[i][0] == '"' && words[i][words[i].length - 1] == '"')
                     {
                         argv.push(words[i].substring(1, words[i].length - 1));
+                        query_params.push("?s fts:match \"" + Tracker.sparql_escape_string(words[i].substring(1, words[i].length - 1)) + "\"");
                     }
                     else
                     {
                         argv.push("*" + words[i] + "*");
+                        query_params.push("?s fts:match \"*" + Tracker.sparql_escape_string(words[i]) + "*\"");
                     }
                 }
             }
-            let [res, pid, in_fd, out_fd, err_fd] = GLib.spawn_async_with_pipes(null, argv, null, GLib.SpawnFlags.SEARCH_PATH, null);
-            var out_reader = new Gio.DataInputStream(
+            var query = "SELECT ?s nie:url(?s) nmm:musicAlbum(?s) nmm:performer(?s) nmm:trackNumber(?s) nie:title(?s) nie:mimeType(?s) rdf:type(?s)\
+                         WHERE { " + query_params.join(" . ") + " }\
+                         ORDER BY DESC (fts:rank(?s))";
+            //~ global.log(query);
+            var cursor = conn.query(query, null);
+            var query_results = {};
+            for (var i in RESULT_TYPES_LABELS)
             {
-                base_stream: new Gio.UnixInputStream(
-                {
-                    fd: out_fd
-                })
-            });
-
-            let search_results = new Array();
-
-            Mainloop.timeout_add(100, Lang.bind(this, function(stream, pid)
+                query_results[i] = new Array();
+            }
+            var result_types;
+            var defined_type;
+            while (cursor.next(null))
             {
-                try
+                defined_type = null;
+                result_types = cursor.get_string(7)[0].split(",");
+                while (result_types.length > 0 && defined_type == null)
                 {
-                    let [output, size] = stream.read_line(null);
-                    if (size > 0){
-                        let current_results = output.toString().split("\n");
-                        var this_result;
-                        var results_parts;
-                        for (var i in current_results)
-                        {
-                            try
-                            {
-                                this_result = current_results[i].trim().trim();
-                                if (this_result != "" && this_result.substring(0, 8) == "file:///")
-                                {
-                                    switch (step)
-                                    {
-                                        case "software":
-                                            results_parts = this_result.split("/");
-                                            this_result = results_parts[results_parts.length - 1].split(".desktop")[0] + ".desktop";
-                                            break;
-                                    }
-                                    if (this._full_results.indexOf(this_result) == -1)
-                                    {
-                                        search_results.push(this_result);
-                                        this._full_results.push(this_result);
-                                    }
-                                }
-                            }
-                            catch(e)
-                            {
-                                global.log(e);
-                            }
-                        }
-                        return true;
-                    }else{
-                        if (this._running)
-                        {
-                            this._applet.push_results(step, search_results);
-                            this._next_search_step();
-                        }
-                        return false;
+                    defined_type = CONVERT_TYPES[result_types.pop()];
+                }
+                if (defined_type == null)
+                {
+                    global.log(cursor.get_string(1) + " : " + cursor.get_string(7));
+                    defined_type = "files";
+                }
+                if (query_results[defined_type].length < 10)
+                {
+                    query_results[defined_type].push(
+                    {
+                        id: cursor.get_string(0),
+                        url: cursor.get_string(1)[0],
+                        musicAlbum: cursor.get_string(2),
+                        performer: cursor.get_string(3),
+                        trackNumber: cursor.get_string(4),
+                        title: cursor.get_string(5),
+                        mimeType: cursor.get_string(6),
+                        type: cursor.get_string(7)
+                    });
+                }
+            }
+            var type_results;
+            var results_parts;
+            for (var result_type in query_results)
+            {
+                type_results = new Array();
+                for (var i in query_results[result_type])
+                {
+                    if (result_type == "software")
+                    {
+                        results_parts = query_results[result_type][i]["url"].split("/");
+                        type_results.push(results_parts[results_parts.length - 1].split(".desktop")[0] + ".desktop");
+                    }
+                    else
+                    {
+                        type_results.push(query_results[result_type][i]["url"]);
                     }
                 }
-                catch(e)
-                {
-                    global.log(e);
-                }
-            }, out_reader, pid));
+                this._applet.push_results(result_type, type_results);
+            }
         }
         catch(e)
         {
