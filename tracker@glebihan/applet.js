@@ -280,12 +280,24 @@ MyApplet.prototype =
 
             section.actor.add_actor(this.searchEntry);
             
-            this._resultsSection = new PopupMenu.PopupMenuSection();
-            this._search_menu.addMenuItem(this._resultsSection);
+            this._scrollBox = new St.ScrollView(
+            {
+                x_fill: true,
+                y_fill: false,
+                y_align: St.Align.START
+            });
+            this._search_menu.addActor(this._scrollBox);
+            this._container = new St.BoxLayout(
+            {
+                vertical:true
+            });
+            this._scrollBox.add_actor(this._container);
+            this._scrollBox.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC);
+            this._scrollBox.set_auto_scrolling(true);
 
             this.searchEntryText = this.searchEntry.clutter_text;
             this.searchEntryText.connect('text-changed', Lang.bind(this, this._onSearchTextChanged));
-
+            
             this._search_process = null;
             
             this._appSys = Cinnamon.AppSystem.get_default();
@@ -338,7 +350,7 @@ MyApplet.prototype =
     {
         if (result_type == "software")
         {
-            var children = this._resultsSection.actor.get_children();
+            var children = this._container.get_children();
             for (var i in children)
             {
                 children[i].destroy();
@@ -346,6 +358,7 @@ MyApplet.prototype =
         }
         
         var final_results = new Array();
+        let button;
         if (results.length > 0)
         {
             for (var i in results)
@@ -359,13 +372,19 @@ MyApplet.prototype =
                             let appinfo = app.get_app_info();
                             if (!appinfo || !appinfo.get_nodisplay())
                             {
-                                final_results.push(new ApplicationResult(this, app));
+                                button = new ApplicationResult(this, app);
+                                button.actor.connect("notify::hover", Lang.bind(this, this._scrollToButton));
+                                button.actor.connect("key-focus-in", Lang.bind(this, this._scrollToButton));
+                                final_results.push(button);
                             }
                         }
                         break;
                     case "folders":
                     case "files":
-                        final_results.push(new FileResult(this, results[i], result_type));
+                        button = new FileResult(this, results[i], result_type);
+                        button.actor.connect("notify::hover", Lang.bind(this, this._scrollToButton));
+                        button.actor.connect("key-focus-in", Lang.bind(this, this._scrollToButton));
+                        final_results.push(button);
                         break;
                 }
             }
@@ -374,10 +393,10 @@ MyApplet.prototype =
         var first_result_type = true;
         if (final_results.length > 0)
         {
-            if (this._resultsSection.actor.get_children().length > 0)
+            if (this._container.get_children().length > 0)
             {
                 var separator = new PopupMenu.PopupSeparatorMenuItem();
-                this._resultsSection.actor.add_actor(separator.actor);
+                this._container.add_actor(separator.actor);
             }
             var result_type_label = new PopupMenu.PopupMenuItem(RESULT_TYPES_LABELS[result_type], 
             {
@@ -387,13 +406,23 @@ MyApplet.prototype =
                 focusOnHover: true
             });
             result_type_label.actor.set_style("font-weight: bold;");
-            this._resultsSection.actor.add_actor(result_type_label.actor);
+            this._container.add_actor(result_type_label.actor);
             
             for (var i in final_results)
             {
-                this._resultsSection.actor.add_actor(final_results[i].actor);
+                this._container.add_actor(final_results[i].actor);
             }
         }
+    },
+    
+    _scrollToButton: function(button)
+    {
+        var current_scroll_value = this._scrollBox.get_vscroll_bar().get_adjustment().get_value();
+        var box_height = this._scrollBox.get_allocation_box().y2 - this._scrollBox.get_allocation_box().y1;
+        var new_scroll_value = current_scroll_value;
+        if (current_scroll_value > button.get_allocation_box().y1 - 10) new_scroll_value = button.get_allocation_box().y1 - 10;
+        if (box_height + current_scroll_value < button.get_allocation_box().y2 + 10) new_scroll_value = button.get_allocation_box().y2-box_height + 10;
+        if (new_scroll_value != current_scroll_value) this._scrollBox.get_vscroll_bar().get_adjustment().set_value(new_scroll_value);
     }
 }
 
