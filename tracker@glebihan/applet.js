@@ -98,7 +98,11 @@ SearchProcess.prototype =
                         }
                         return true;
                     }else{
-                        this._push_results(step, search_results);
+                        if (this._running)
+                        {
+                            this._applet.push_results(step, search_results);
+                            this._next_search_step();
+                        }
                         return false;
                     }
                 }
@@ -114,15 +118,6 @@ SearchProcess.prototype =
         }
     },
 
-    _push_results: function(step, results)
-    {
-        if (this._running)
-        {
-            this._results[step] = results;
-            this._next_search_step();
-        }
-    },
-
     _next_search_step: function()
     {
         if (this._running)
@@ -131,10 +126,6 @@ SearchProcess.prototype =
             {
                 var step = this._remaining_steps.shift();
                 this._search_step(step);
-            }
-            else
-            {
-                this._applet.push_results(this._results);
             }
         }
     },
@@ -341,70 +332,63 @@ MyApplet.prototype =
         this.searchEntryText.set_selection(0, this.searchEntry.get_text().length);
     },
 
-    push_results: function(results)
+    push_results: function(result_type, results)
     {
-        var children = this._resultsSection.actor.get_children();
-        for (var i in children)
+        if (result_type == "software")
         {
-            children[i].destroy();
+            var children = this._resultsSection.actor.get_children();
+            for (var i in children)
+            {
+                children[i].destroy();
+            }
         }
         
-        var final_results = {};
-        for (var result_type in results)
+        var final_results = new Array();
+        if (results.length > 0)
         {
-            final_results[result_type] = new Array();
-            if (results[result_type].length > 0)
+            for (var i in results)
             {
-                for (var i in results[result_type])
+                switch (result_type)
                 {
-                    switch (result_type)
-                    {
-                        case "software":
-                            let app = this._appSys.lookup_app(results[result_type][i]);
-                            if (app)
+                    case "software":
+                        let app = this._appSys.lookup_app(results[i]);
+                        if (app)
+                        {
+                            let appinfo = app.get_app_info();
+                            if (!appinfo || !appinfo.get_nodisplay())
                             {
-                                let appinfo = app.get_app_info();
-                                if (!appinfo || !appinfo.get_nodisplay())
-                                {
-                                    final_results[result_type].push(new ApplicationResult(this, app));
-                                }
+                                final_results.push(new ApplicationResult(this, app));
                             }
-                            break;
-                        case "files":
-                            final_results[result_type].push(new FileResult(this, results[result_type][i]));
-                            break;
-                    }
+                        }
+                        break;
+                    case "files":
+                        final_results.push(new FileResult(this, results[i]));
+                        break;
                 }
             }
         }
+        
         var first_result_type = true;
-        for (var result_type in final_results)
+        if (final_results.length > 0)
         {
-            if (final_results[result_type].length > 0)
+            if (this._resultsSection.actor.get_children().length > 0)
             {
-                if (first_result_type)
-                {
-                    first_result_type = false;
-                }
-                else
-                {
-                    var separator = new PopupMenu.PopupSeparatorMenuItem();
-                    this._resultsSection.actor.add_actor(separator.actor);
-                }
-                var result_type_label = new PopupMenu.PopupMenuItem(RESULT_TYPES_LABELS[result_type], 
-                {
-                    reactive: false,
-                    hover: false,
-                    sensitive: false,
-                    focusOnHover: true
-                });
-                result_type_label.actor.set_style("font-weight: bold;");
-                this._resultsSection.actor.add_actor(result_type_label.actor);
-                
-                for (var i in final_results[result_type])
-                {
-                    this._resultsSection.actor.add_actor(final_results[result_type][i].actor);
-                }
+                var separator = new PopupMenu.PopupSeparatorMenuItem();
+                this._resultsSection.actor.add_actor(separator.actor);
+            }
+            var result_type_label = new PopupMenu.PopupMenuItem(RESULT_TYPES_LABELS[result_type], 
+            {
+                reactive: false,
+                hover: false,
+                sensitive: false,
+                focusOnHover: true
+            });
+            result_type_label.actor.set_style("font-weight: bold;");
+            this._resultsSection.actor.add_actor(result_type_label.actor);
+            
+            for (var i in final_results)
+            {
+                this._resultsSection.actor.add_actor(final_results[i].actor);
             }
         }
     }
