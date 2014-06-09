@@ -330,13 +330,14 @@ MyApplet.prototype =
                 y_fill: false,
                 y_align: St.Align.START
             });
+            this._scrollBox.set_style("width: 500px;");
             this._search_menu.addActor(this._scrollBox);
             this._container = new St.BoxLayout(
             {
                 vertical:true
             });
             this._scrollBox.add_actor(this._container);
-            this._scrollBox.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC);
+            this._scrollBox.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC);
             this._scrollBox.set_auto_scrolling(true);
 
             this.searchEntryText = this.searchEntry.clutter_text;
