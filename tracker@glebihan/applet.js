@@ -16,6 +16,7 @@ const _ = Gettext.gettext;
 const RESULT_TYPES_LABELS = 
 {
     software: _("Software"),
+    folders: _("Folders"),
     files: _("Files")
 }
 
@@ -32,7 +33,7 @@ SearchProcess.prototype =
         this._applet = applet;
         this._searchString = searchString;
 
-        this._remaining_steps = ["software", "files"];
+        this._remaining_steps = ["software", "folders", "files"];
         this._results = {};
     },
 
@@ -40,10 +41,11 @@ SearchProcess.prototype =
     {
         try
         {
-            var argv = ["tracker-search", "--disable-snippets", "-l", "10", "--disable-color"];
+            var argv = ["tracker-search", "--disable-snippets", "-l", (step == "folders" ? "5" : "10"), "--disable-color"];
             switch (step)
             {
                 case "software": argv.push("--software"); break;
+                case "folders": argv.push("-s"); break;
                 case "files": argv.push("-f"); break;
             }
             var words = this._searchString.split(" ");
@@ -181,16 +183,16 @@ ApplicationResult.prototype =
     }
 }
 
-function FileResult(applet, filename)
+function FileResult(applet, filename, type)
 {
-    this._init(applet, filename);
+    this._init(applet, filename, type);
 }
 
 FileResult.prototype = 
 {
     __proto__: PopupMenu.PopupBaseMenuItem.prototype,
     
-    _init: function(applet, filename)
+    _init: function(applet, filename, type)
     {
         PopupMenu.PopupBaseMenuItem.prototype._init.call(this);
         
@@ -199,7 +201,7 @@ FileResult.prototype =
         
         this.icon = new St.Icon(
         {
-            icon_name: "gtk-file",
+            icon_name: (type == "files" ? "gtk-file" : "folder"),
             icon_size: 16,
             icon_type: St.IconType.FULLCOLOR
         });
@@ -361,8 +363,9 @@ MyApplet.prototype =
                             }
                         }
                         break;
+                    case "folders":
                     case "files":
-                        final_results.push(new FileResult(this, results[i]));
+                        final_results.push(new FileResult(this, results[i], result_type));
                         break;
                 }
             }
