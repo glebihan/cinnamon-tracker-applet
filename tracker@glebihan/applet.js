@@ -53,7 +53,14 @@ SearchProcess.prototype =
             {
                 if (words[i])
                 {
-                    argv.push("*" + words[i] + "*");
+                    if (words[i][0] == '"' && words[i][words[i].length - 1] == '"')
+                    {
+                        argv.push(words[i].substring(1, words[i].length - 1));
+                    }
+                    else
+                    {
+                        argv.push("*" + words[i] + "*");
+                    }
                 }
             }
             let [res, pid, in_fd, out_fd, err_fd] = GLib.spawn_async_with_pipes(null, argv, null, GLib.SpawnFlags.SEARCH_PATH, null);
