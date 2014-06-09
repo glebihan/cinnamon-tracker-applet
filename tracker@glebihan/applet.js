@@ -206,12 +206,26 @@ FileResult.prototype =
         this._filename = filename;
         this._applet = applet;
         
-        this.icon = new St.Icon(
+        try
         {
-            icon_name: (type == "files" ? "gtk-file" : "folder"),
-            icon_size: 16,
-            icon_type: St.IconType.FULLCOLOR
-        });
+            let icon = Cinnamon.util_get_icon_for_uri(filename);
+            if (icon)
+            {
+                this.icon = St.TextureCache.get_default().load_gicon(null, icon, 16);
+            }
+        }
+        catch (e)
+        {
+        }
+        if (!this.icon)
+        {
+            this.icon = new St.Icon(
+            {
+                icon_name: (type == "files" ? "gtk-file" : "folder"),
+                icon_size: 16,
+                icon_type: St.IconType.FULLCOLOR
+            });
+        }
         this.addActor(this.icon);
         this.label = new St.Label(
         {
