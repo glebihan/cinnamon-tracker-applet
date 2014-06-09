@@ -16,8 +16,11 @@ const _ = Gettext.gettext;
 const RESULT_TYPES_LABELS = 
 {
     software: _("Software"),
+    pictures: _("Pictures"),
+    videos: _("Videos"),
+    music: _("Music"),
     folders: _("Folders"),
-    files: _("Files")
+    files: _("Other Files")
 }
 
 function SearchProcess(applet, searchString)
@@ -33,8 +36,8 @@ SearchProcess.prototype =
         this._applet = applet;
         this._searchString = searchString;
 
-        this._remaining_steps = ["software", "folders", "files"];
-        this._results = {};
+        this._remaining_steps = ["software", "pictures", "videos", "music", "folders", "files"];
+        this._full_results = new Array();
     },
 
     _search_step: function(step)
@@ -47,6 +50,9 @@ SearchProcess.prototype =
                 case "software": argv.push("--software"); break;
                 case "folders": argv.push("-s"); break;
                 case "files": argv.push("-f"); break;
+                case "pictures": argv.push("-i"); break;
+                case "videos": argv.push("-v"); break;
+                case "music": argv.push("-m"); break;
             }
             var words = this._searchString.split(" ");
             for (var i in words)
@@ -97,7 +103,11 @@ SearchProcess.prototype =
                                             this_result = results_parts[results_parts.length - 1].split(".desktop")[0] + ".desktop";
                                             break;
                                     }
-                                    search_results.push(this_result);
+                                    if (this._full_results.indexOf(this_result) == -1)
+                                    {
+                                        search_results.push(this_result);
+                                        this._full_results.push(this_result);
+                                    }
                                 }
                             }
                             catch(e)
@@ -400,6 +410,9 @@ MyApplet.prototype =
                             }
                         }
                         break;
+                    case "pictures":
+                    case "videos":
+                    case "music":
                     case "folders":
                     case "files":
                         button = new FileResult(this, results[i], result_type);
