@@ -252,6 +252,52 @@ MyApplet.prototype =
         }
     },
     
+    _on_query_results: function(obj, result)
+    {
+        var cursor = obj.query_finish(result);
+        var query_results = {};
+        for (var i in RESULT_TYPES_LABELS)
+        {
+            query_results[i] = new Array();
+        }
+        var result_types;
+        var defined_type;
+        while (cursor.next(null))
+        {
+            defined_type = null;
+            if (!cursor.get_string(7)[0] || !cursor.get_string(1)[0])
+            {
+                // If we have no defined file type or no file url, skip
+                continue;
+            }
+            result_types = cursor.get_string(7)[0].split(",");
+            while (result_types.length > 0 && defined_type == null)
+            {
+                defined_type = CONVERT_TYPES[result_types.pop()];
+            }
+            if (defined_type == null)
+            {
+                //~ global.log(cursor.get_string(1) + " : " + cursor.get_string(7));
+                defined_type = "files";
+            }
+            if (query_results[defined_type].length < 10)
+            {
+                query_results[defined_type].push(
+                {
+                    id: cursor.get_string(0)[0],
+                    url: cursor.get_string(1)[0],
+                    musicAlbum: decodeURIComponent(cursor.get_string(2)[0]).substring(10),
+                    performer: decodeURIComponent(cursor.get_string(3)[0]).substring(11),
+                    trackNumber: cursor.get_string(4)[0],
+                    title: cursor.get_string(5)[0],
+                    mimeType: cursor.get_string(6)[0],
+                    type: defined_type
+                });
+            }
+        }
+        this._show_results(query_results);
+    },
+    
     _process_search: function(searchString)
     {
         try
@@ -277,48 +323,7 @@ MyApplet.prototype =
                          WHERE { " + query_params.join(" . ") + " }\
                          ORDER BY DESC (fts:rank(?s))";
             //~ global.log(query);
-            var cursor = conn.query(query, null);
-            var query_results = {};
-            for (var i in RESULT_TYPES_LABELS)
-            {
-                query_results[i] = new Array();
-            }
-            var result_types;
-            var defined_type;
-            while (cursor.next(null))
-            {
-                defined_type = null;
-                if (!cursor.get_string(7)[0] || !cursor.get_string(1)[0])
-                {
-                    // If we have no defined file type or no file url, skip
-                    continue;
-                }
-                result_types = cursor.get_string(7)[0].split(",");
-                while (result_types.length > 0 && defined_type == null)
-                {
-                    defined_type = CONVERT_TYPES[result_types.pop()];
-                }
-                if (defined_type == null)
-                {
-                    //~ global.log(cursor.get_string(1) + " : " + cursor.get_string(7));
-                    defined_type = "files";
-                }
-                if (query_results[defined_type].length < 10)
-                {
-                    query_results[defined_type].push(
-                    {
-                        id: cursor.get_string(0)[0],
-                        url: cursor.get_string(1)[0],
-                        musicAlbum: decodeURIComponent(cursor.get_string(2)[0]).substring(10),
-                        performer: decodeURIComponent(cursor.get_string(3)[0]).substring(11),
-                        trackNumber: cursor.get_string(4)[0],
-                        title: cursor.get_string(5)[0],
-                        mimeType: cursor.get_string(6)[0],
-                        type: defined_type
-                    });
-                }
-            }
-            this._show_results(query_results);
+            conn.query_async(query, null, Lang.bind(this, this._on_query_results));
         }
         catch(e)
         {
