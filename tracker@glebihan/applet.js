@@ -34,12 +34,12 @@ const CONVERT_TYPES =
     "http://www.semanticdesktop.org/ontologies/2007/03/22/nfo#FileDataObject": "files"
 }
 
-function ApplicationResult(applet, app)
+function ApplicationResultButton(applet, app)
 {
     this._init(applet, app);
 }
 
-ApplicationResult.prototype = 
+ApplicationResultButton.prototype = 
 {
     __proto__: PopupMenu.PopupBaseMenuItem.prototype,
     
@@ -72,25 +72,25 @@ ApplicationResult.prototype =
     }
 }
 
-function FileResult(applet, filename, type)
+function FileResultButton(applet, result, type)
 {
-    this._init(applet, filename, type);
+    this._init(applet, result, type);
 }
 
-FileResult.prototype = 
+FileResultButton.prototype = 
 {
     __proto__: PopupMenu.PopupBaseMenuItem.prototype,
     
-    _init: function(applet, filename, type)
+    _init: function(applet, result, type, custom_label)
     {
         PopupMenu.PopupBaseMenuItem.prototype._init.call(this);
         
-        this._filename = filename;
+        this._filename = result["url"];
         this._applet = applet;
         
         try
         {
-            let icon = Cinnamon.util_get_icon_for_uri(filename);
+            let icon = Cinnamon.util_get_icon_for_uri(this._filename);
             if (icon)
             {
                 this.icon = St.TextureCache.get_default().load_gicon(null, icon, 16);
@@ -111,7 +111,7 @@ FileResult.prototype =
         this.addActor(this.icon);
         this.label = new St.Label(
         {
-            text: filename
+            text: (custom_label ? custom_label : this._filename)
         });
         this.addActor(this.label);
         this.icon.realize();
@@ -124,6 +124,24 @@ FileResult.prototype =
     {
         this._applet._search_menu.close();
         Util.trySpawn(["xdg-open", this._filename]);
+    }
+}
+
+function MusicResultButton(applet, result, type)
+{
+    this._init(applet, result, type);
+}
+
+MusicResultButton.prototype = 
+{
+    __proto__: FileResultButton.prototype,
+    
+    _init: function(applet, result, type)
+    {
+        var basename = result["url"].split("/");
+        basename = decodeURIComponent(basename[basename.length - 1]);
+        var label = (result["performer"] ? result["performer"] + " - " : "") + (result["musicAlbum"] ? result["musicAlbum"] + " - " : "") + (result["trackNumber"] ? result["trackNumber"] + " - " : "") + (result["title"] ? result["title"] : basename);
+        FileResultButton.prototype._init.call(this, applet, result, type, label.trim());
     }
 }
 
@@ -288,14 +306,14 @@ MyApplet.prototype =
                 {
                     query_results[defined_type].push(
                     {
-                        id: cursor.get_string(0),
+                        id: cursor.get_string(0)[0],
                         url: cursor.get_string(1)[0],
-                        musicAlbum: cursor.get_string(2),
-                        performer: cursor.get_string(3),
-                        trackNumber: cursor.get_string(4),
-                        title: cursor.get_string(5),
-                        mimeType: cursor.get_string(6),
-                        type: cursor.get_string(7)
+                        musicAlbum: decodeURIComponent(cursor.get_string(2)[0]).substring(10),
+                        performer: decodeURIComponent(cursor.get_string(3)[0]).substring(11),
+                        trackNumber: cursor.get_string(4)[0],
+                        title: cursor.get_string(5)[0],
+                        mimeType: cursor.get_string(6)[0],
+                        type: defined_type
                     });
                 }
             }
@@ -326,6 +344,7 @@ MyApplet.prototype =
                 results_buttons[result_type] = new Array();
                 for (var i in this_results)
                 {
+                    button = null;
                     switch (result_type)
                     {
                         case "software":
@@ -336,23 +355,25 @@ MyApplet.prototype =
                                 let appinfo = app.get_app_info();
                                 if (!appinfo || !appinfo.get_nodisplay())
                                 {
-                                    button = new ApplicationResult(this, app);
-                                    button.actor.connect("notify::hover", Lang.bind(this, this._scrollToButton));
-                                    button.actor.connect("key-focus-in", Lang.bind(this, this._scrollToButton));
-                                    results_buttons[result_type].push(button);
+                                    button = new ApplicationResultButton(this, app);
                                 }
                             }
                             break;
+                        case "music":
+                            button = new MusicResultButton(this, this_results[i], result_type);
+                            break;
                         case "pictures":
                         case "videos":
-                        case "music":
                         case "folders":
                         case "files":
-                            button = new FileResult(this, this_results[i]["url"], result_type);
-                            button.actor.connect("notify::hover", Lang.bind(this, this._scrollToButton));
-                            button.actor.connect("key-focus-in", Lang.bind(this, this._scrollToButton));
-                            results_buttons[result_type].push(button);
+                            button = new FileResultButton(this, this_results[i], result_type);
                             break;
+                    }
+                    if (button != null)
+                    {
+                        button.actor.connect("notify::hover", Lang.bind(this, this._scrollToButton));
+                        button.actor.connect("key-focus-in", Lang.bind(this, this._scrollToButton));
+                        results_buttons[result_type].push(button);
                     }
                 }
             }
