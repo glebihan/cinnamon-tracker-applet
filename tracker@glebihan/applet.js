@@ -34,147 +34,6 @@ const CONVERT_TYPES =
     "http://www.semanticdesktop.org/ontologies/2007/03/22/nfo#FileDataObject": "files"
 }
 
-function SearchProcess(applet, searchString)
-{
-    this._init(applet, searchString);
-}
-
-SearchProcess.prototype =
-{
-    _init: function(applet, searchString)
-    {
-        this._running = false;
-        this._applet = applet;
-        this._searchString = searchString;
-
-        this._remaining_steps = ["software", "pictures", "videos", "music", "folders", "files"];
-        this._full_results = new Array();
-    },
-
-    _search_step: function(step)
-    {
-        try
-        {
-            var conn = Tracker.SparqlConnection.get(null);
-            var argv = ["tracker-search", "--disable-snippets", "-l", (step == "folders" ? "5" : "10"), "--disable-color"];
-            switch (step)
-            {
-                case "software": argv.push("--software"); break;
-                case "folders": argv.push("-s"); break;
-                case "files": argv.push("-f"); break;
-                case "pictures": argv.push("-i"); break;
-                case "videos": argv.push("-v"); break;
-                case "music": argv.push("-m"); break;
-            }
-            var words = this._searchString.split(" ");
-            var query_params = new Array();
-            for (var i in words)
-            {
-                if (words[i])
-                {
-                    if (words[i][0] == '"' && words[i][words[i].length - 1] == '"')
-                    {
-                        argv.push(words[i].substring(1, words[i].length - 1));
-                        query_params.push("?s fts:match \"" + Tracker.sparql_escape_string(words[i].substring(1, words[i].length - 1)) + "\"");
-                    }
-                    else
-                    {
-                        argv.push("*" + words[i] + "*");
-                        query_params.push("?s fts:match \"*" + Tracker.sparql_escape_string(words[i]) + "*\"");
-                    }
-                }
-            }
-            var query = "SELECT ?s nie:url(?s) nmm:musicAlbum(?s) nmm:performer(?s) nmm:trackNumber(?s) nie:title(?s) nie:mimeType(?s) rdf:type(?s)\
-                         WHERE { " + query_params.join(" . ") + " }\
-                         ORDER BY DESC (fts:rank(?s))";
-            //~ global.log(query);
-            var cursor = conn.query(query, null);
-            var query_results = {};
-            for (var i in RESULT_TYPES_LABELS)
-            {
-                query_results[i] = new Array();
-            }
-            var result_types;
-            var defined_type;
-            while (cursor.next(null))
-            {
-                defined_type = null;
-                result_types = cursor.get_string(7)[0].split(",");
-                while (result_types.length > 0 && defined_type == null)
-                {
-                    defined_type = CONVERT_TYPES[result_types.pop()];
-                }
-                if (defined_type == null)
-                {
-                    global.log(cursor.get_string(1) + " : " + cursor.get_string(7));
-                    defined_type = "files";
-                }
-                if (query_results[defined_type].length < 10)
-                {
-                    query_results[defined_type].push(
-                    {
-                        id: cursor.get_string(0),
-                        url: cursor.get_string(1)[0],
-                        musicAlbum: cursor.get_string(2),
-                        performer: cursor.get_string(3),
-                        trackNumber: cursor.get_string(4),
-                        title: cursor.get_string(5),
-                        mimeType: cursor.get_string(6),
-                        type: cursor.get_string(7)
-                    });
-                }
-            }
-            var type_results;
-            var results_parts;
-            for (var result_type in query_results)
-            {
-                type_results = new Array();
-                for (var i in query_results[result_type])
-                {
-                    if (result_type == "software")
-                    {
-                        results_parts = query_results[result_type][i]["url"].split("/");
-                        type_results.push(results_parts[results_parts.length - 1].split(".desktop")[0] + ".desktop");
-                    }
-                    else
-                    {
-                        type_results.push(query_results[result_type][i]["url"]);
-                    }
-                }
-                this._applet.push_results(result_type, type_results);
-            }
-        }
-        catch(e)
-        {
-            global.log(e);
-        }
-    },
-
-    _next_search_step: function()
-    {
-        if (this._running)
-        {
-            if (this._remaining_steps.length > 0)
-            {
-                var step = this._remaining_steps.shift();
-                this._search_step(step);
-            }
-        }
-    },
-
-    run: function()
-    {
-        this._running = true;
-
-        this._next_search_step();
-    },
-
-    stop: function()
-    {
-        this._running = false;
-    }
-}
-
 function ApplicationResult(applet, app)
 {
     this._init(applet, app);
@@ -371,8 +230,160 @@ MyApplet.prototype =
 
         if (searchString != "")
         {
-            this._search_process = new SearchProcess(this, searchString);
-            this._search_process.run();
+            this._process_search(searchString);
+        }
+    },
+    
+    _process_search: function(searchString)
+    {
+        try
+        {
+            var conn = Tracker.SparqlConnection.get(null);
+            var words = searchString.split(" ");
+            var query_params = new Array();
+            for (var i in words)
+            {
+                if (words[i])
+                {
+                    if (words[i][0] == '"' && words[i][words[i].length - 1] == '"')
+                    {
+                        query_params.push("?s fts:match \"" + Tracker.sparql_escape_string(words[i].substring(1, words[i].length - 1)) + "\"");
+                    }
+                    else
+                    {
+                        query_params.push("?s fts:match \"*" + Tracker.sparql_escape_string(words[i]) + "*\"");
+                    }
+                }
+            }
+            var query = "SELECT ?s nie:url(?s) nmm:musicAlbum(?s) nmm:performer(?s) nmm:trackNumber(?s) nie:title(?s) nie:mimeType(?s) rdf:type(?s)\
+                         WHERE { " + query_params.join(" . ") + " }\
+                         ORDER BY DESC (fts:rank(?s))";
+            //~ global.log(query);
+            var cursor = conn.query(query, null);
+            var query_results = {};
+            for (var i in RESULT_TYPES_LABELS)
+            {
+                query_results[i] = new Array();
+            }
+            var result_types;
+            var defined_type;
+            while (cursor.next(null))
+            {
+                defined_type = null;
+                if (!cursor.get_string(7)[0])
+                {
+                    continue;
+                }
+                result_types = cursor.get_string(7)[0].split(",");
+                while (result_types.length > 0 && defined_type == null)
+                {
+                    defined_type = CONVERT_TYPES[result_types.pop()];
+                }
+                if (defined_type == null)
+                {
+                    //~ global.log(cursor.get_string(1) + " : " + cursor.get_string(7));
+                    defined_type = "files";
+                }
+                if (query_results[defined_type].length < 10)
+                {
+                    query_results[defined_type].push(
+                    {
+                        id: cursor.get_string(0),
+                        url: cursor.get_string(1)[0],
+                        musicAlbum: cursor.get_string(2),
+                        performer: cursor.get_string(3),
+                        trackNumber: cursor.get_string(4),
+                        title: cursor.get_string(5),
+                        mimeType: cursor.get_string(6),
+                        type: cursor.get_string(7)
+                    });
+                }
+            }
+            this._show_results(query_results);
+        }
+        catch(e)
+        {
+            global.log(e);
+        }
+    },
+    
+    _show_results: function(results)
+    {
+        var children = this._container.get_children();
+        for (var i in children)
+        {
+            children[i].destroy();
+        }
+        
+        var results_buttons = {};
+        let button;
+        let this_results;
+        for (var result_type in results)
+        {
+            this_results = results[result_type];
+            if (this_results.length > 0)
+            {
+                results_buttons[result_type] = new Array();
+                for (var i in this_results)
+                {
+                    switch (result_type)
+                    {
+                        case "software":
+                            var results_parts = this_results[i]["url"].split("/");
+                            let app = this._appSys.lookup_app(results_parts[results_parts.length - 1].split(".desktop")[0] + ".desktop");
+                            if (app)
+                            {
+                                let appinfo = app.get_app_info();
+                                if (!appinfo || !appinfo.get_nodisplay())
+                                {
+                                    button = new ApplicationResult(this, app);
+                                    button.actor.connect("notify::hover", Lang.bind(this, this._scrollToButton));
+                                    button.actor.connect("key-focus-in", Lang.bind(this, this._scrollToButton));
+                                    results_buttons[result_type].push(button);
+                                }
+                            }
+                            break;
+                        case "pictures":
+                        case "videos":
+                        case "music":
+                        case "folders":
+                        case "files":
+                            button = new FileResult(this, this_results[i]["url"], result_type);
+                            button.actor.connect("notify::hover", Lang.bind(this, this._scrollToButton));
+                            button.actor.connect("key-focus-in", Lang.bind(this, this._scrollToButton));
+                            results_buttons[result_type].push(button);
+                            break;
+                    }
+                }
+            }
+        }
+        
+        let this_results_buttons;
+        for (var result_type in results_buttons)
+        {
+            this_results_buttons = results_buttons[result_type];
+            if (this_results_buttons.length > 0)
+            {
+                if (this._container.get_children().length > 0)
+                {
+                    var separator = new PopupMenu.PopupSeparatorMenuItem();
+                    this._container.add_actor(separator.actor);
+                }
+                var result_type_label = new PopupMenu.PopupMenuItem(RESULT_TYPES_LABELS[result_type], 
+                {
+                    reactive: false,
+                    hover: false,
+                    sensitive: false,
+                    focusOnHover: true
+                });
+                result_type_label.actor.set_style("font-weight: bold;");
+                this._container.add_actor(result_type_label.actor);
+                
+                for (var i in this_results_buttons)
+                {
+                    this._container.add_actor(this_results_buttons[i].actor);
+                }
+            }
         }
     },
 
@@ -389,78 +400,6 @@ MyApplet.prototype =
         this._search_menu.toggle();
         global.stage.set_key_focus(this.searchEntry);
         this.searchEntryText.set_selection(0, this.searchEntry.get_text().length);
-    },
-
-    push_results: function(result_type, results)
-    {
-        if (result_type == "software")
-        {
-            var children = this._container.get_children();
-            for (var i in children)
-            {
-                children[i].destroy();
-            }
-        }
-        
-        var final_results = new Array();
-        let button;
-        if (results.length > 0)
-        {
-            for (var i in results)
-            {
-                switch (result_type)
-                {
-                    case "software":
-                        let app = this._appSys.lookup_app(results[i]);
-                        if (app)
-                        {
-                            let appinfo = app.get_app_info();
-                            if (!appinfo || !appinfo.get_nodisplay())
-                            {
-                                button = new ApplicationResult(this, app);
-                                button.actor.connect("notify::hover", Lang.bind(this, this._scrollToButton));
-                                button.actor.connect("key-focus-in", Lang.bind(this, this._scrollToButton));
-                                final_results.push(button);
-                            }
-                        }
-                        break;
-                    case "pictures":
-                    case "videos":
-                    case "music":
-                    case "folders":
-                    case "files":
-                        button = new FileResult(this, results[i], result_type);
-                        button.actor.connect("notify::hover", Lang.bind(this, this._scrollToButton));
-                        button.actor.connect("key-focus-in", Lang.bind(this, this._scrollToButton));
-                        final_results.push(button);
-                        break;
-                }
-            }
-        }
-        
-        var first_result_type = true;
-        if (final_results.length > 0)
-        {
-            if (this._container.get_children().length > 0)
-            {
-                var separator = new PopupMenu.PopupSeparatorMenuItem();
-                this._container.add_actor(separator.actor);
-            }
-            var result_type_label = new PopupMenu.PopupMenuItem(RESULT_TYPES_LABELS[result_type], 
-            {
-                reactive: false,
-                hover: false,
-                sensitive: false,
-                focusOnHover: true
-            });
-            result_type_label.actor.set_style("font-weight: bold;");
-            this._container.add_actor(result_type_label.actor);
-            
-            for (var i in final_results)
-            {
-                this._container.add_actor(final_results[i].actor);
-            }
-        }
     },
     
     _scrollToButton: function(button)
