@@ -111,7 +111,7 @@ FileResultButton.prototype =
         this.addActor(this.icon);
         this.label = new St.Label(
         {
-            text: (custom_label ? custom_label : this._filename)
+            text: (custom_label ? custom_label : decodeURIComponent(this._filename))
         });
         this.addActor(this.label);
         this.icon.realize();
@@ -288,8 +288,9 @@ MyApplet.prototype =
             while (cursor.next(null))
             {
                 defined_type = null;
-                if (!cursor.get_string(7)[0])
+                if (!cursor.get_string(7)[0] || !cursor.get_string(1)[0])
                 {
+                    // If we have no defined file type or no file url, skip
                     continue;
                 }
                 result_types = cursor.get_string(7)[0].split(",");
