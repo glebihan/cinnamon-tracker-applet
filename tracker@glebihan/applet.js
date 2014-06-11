@@ -220,8 +220,8 @@ MyApplet.prototype =
             this.searchEntryText = this.searchEntry.clutter_text;
             this.searchEntryText.connect('text-changed', Lang.bind(this, this._onSearchTextChanged));
             
-            this._search_process = null;
-            
+            this._search_timer = null;
+                        
             this._appSys = Cinnamon.AppSystem.get_default();
             
             this.on_launch_shortcut_changed();
@@ -239,16 +239,20 @@ MyApplet.prototype =
 
     _onSearchTextChanged: function(se, prop)
     {
-        if (this._search_process != null)
-        {
-            this._search_process.stop();
-        }
-
         let searchString = this.searchEntry.get_text();
 
         if (searchString != "")
         {
-            this._process_search(searchString);
+            if (this._search_timer)
+            {
+                Mainloop.source_remove(this._search_timer);
+                this._search_timer = null;
+            }
+            this._search_timer = Mainloop.timeout_add(300, Lang.bind(this, function()
+            {
+                this._search_timer = null;
+                this._process_search(searchString);
+            }));
         }
     },
     
