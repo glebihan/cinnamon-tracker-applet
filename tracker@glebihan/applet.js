@@ -325,7 +325,8 @@ MyApplet.prototype =
             }
             var query = "SELECT ?s nie:url(?s) nmm:musicAlbum(?s) nmm:performer(?s) nmm:trackNumber(?s) nie:title(?s) nie:mimeType(?s) rdf:type(?s)\
                          WHERE { " + query_params.join(" . ") + " }\
-                         ORDER BY DESC (fts:rank(?s))";
+                         ORDER BY DESC (fts:rank(?s))\
+                         LIMIT 100";
             //~ global.log(query);
             conn.query_async(query, null, Lang.bind(this, this._on_query_results));
         }
