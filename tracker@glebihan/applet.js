@@ -319,7 +319,7 @@ MyApplet.prototype =
                     }
                     else
                     {
-                        query_params.push("?s fts:match \"*" + Tracker.sparql_escape_string(words[i]) + "*\"");
+                        query_params.push("?s fts:match \"" + Tracker.sparql_escape_string(words[i]) + "*\"");
                     }
                 }
             }
